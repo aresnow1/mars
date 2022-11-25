@@ -126,3 +126,7 @@ class ActorPoolConfig:
 
     def get_metric_configs(self):
         return self._conf["metrics"]
+
+    def add_extra_config(self, extra_config: Dict[str, Any]):
+        if extra_config:
+            self._conf.update(extra_config)

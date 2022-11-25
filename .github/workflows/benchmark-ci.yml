@@ -42,6 +42,7 @@ jobs:
         run: |
           source ./ci/reload-env.sh
           export DEFAULT_VENV=$VIRTUAL_ENV
+          conda install -n test --quiet --yes  -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
           pip install numpy scipy cython oss2 asv
           pip install -e ".[dev,extra]"
 

@@ -50,6 +50,7 @@ jobs:
 
         if [[ ! "$PYTHON" =~ "3.6" ]]; then
           conda install -n test --quiet --yes -c conda-forge python=$PYTHON numba
+          conda install -n test --quiet --yes  -c conda-forge -c rapidsai ucx-proc=*=cpu ucx ucx-py
         fi
 
         # todo remove this when fastparquet release new version

@@ -25,7 +25,11 @@ from ..pool import ActorPoolType
 class TestMainActorPool(MainActorPool):
     @classmethod
     def get_external_addresses(
-        cls, address: str, n_process: int = None, ports: List[int] = None
+        cls,
+        address: str,
+        n_process: int = None,
+        ports: List[int] = None,
+        schemes: List[str] = None,
     ):
         if "://" in address:
             address = address.split("://", 1)[1]

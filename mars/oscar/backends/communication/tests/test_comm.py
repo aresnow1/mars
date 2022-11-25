@@ -23,11 +23,12 @@ import pytest
 
 from .....lib.aio import AioEvent
 from .....tests.core import require_cudf, require_cupy
-from .....utils import get_next_port
+from .....utils import get_next_port, lazy_import
 from .. import (
-    SocketChannel,
+    Channel,
     SocketServer,
     UnixSocketServer,
+    SocketChannel,
     DummyChannel,
     DummyServer,
     get_client_type,
@@ -35,10 +36,15 @@ from .. import (
     UnixSocketClient,
     DummyClient,
     Server,
+    UCXServer,
 )
 
 test_data = np.random.RandomState(0).rand(10, 10)
 port = get_next_port()
+cupy = lazy_import("cupy")
+cudf = lazy_import("cudf")
+ucp = lazy_import("ucp")
+ucp_port = get_next_port()
 
 
 # server_type, config, con
@@ -47,6 +53,11 @@ params: List[Tuple[Type[Server], Dict, str]] = [
 ]
 if sys.platform != "win32":
     params.append((UnixSocketServer, dict(process_index="0"), f"unixsocket:///0"))
+if ucp is not None:
+    # test ucx
+    params.append(
+        (UCXServer, dict(host="127.0.0.1", port=ucp_port), f"127.0.0.1:{ucp_port}")
+    )
 local_params = params.copy()
 local_params.append((DummyServer, dict(), "dummy://0"))
 
@@ -143,7 +154,7 @@ cudf_data = pd.DataFrame({"col1": np.arange(10), "col2": [f"s{i}" for i in range
 
 def _wrap_cuda_test(server_started_event, conf, tp):
     async def _test():
-        async def check_data(chan: SocketChannel):
+        async def check_data(chan: Channel):
             import cupy
 
             r = await chan.recv()
@@ -167,18 +178,16 @@ def _wrap_cuda_test(server_started_event, conf, tp):
 
 @require_cupy
 @require_cudf
+@pytest.mark.parametrize("server_type", [SocketServer, UCXServer])
 @pytest.mark.asyncio
-async def test_multiprocess_cuda_comm():
-    import cupy
-    import cudf
-
+async def test_multiprocess_cuda_comm(server_type):
     mp_ctx = multiprocessing.get_context("spawn")
 
     server_started = mp_ctx.Event()
     port = get_next_port()
     p = mp_ctx.Process(
         target=_wrap_cuda_test,
-        args=(server_started, dict(host="127.0.0.1", port=port), SocketServer),
+        args=(server_started, dict(host="127.0.0.1", port=port), server_type),
     )
     p.daemon = True
     p.start()
@@ -186,12 +195,12 @@ async def test_multiprocess_cuda_comm():
     await AioEvent(server_started).wait()
 
     # create client
-    client = await SocketServer.client_type.connect(f"127.0.0.1:{port}")
+    client = await server_type.client_type.connect(f"127.0.0.1:{port}")
 
     await client.channel.send(cupy.asarray(cupy_data))
     assert "success" == await client.recv()
 
-    client = await SocketServer.client_type.connect(f"127.0.0.1:{port}")
+    client = await server_type.client_type.connect(f"127.0.0.1:{port}")
 
     await client.channel.send(cudf.DataFrame(cudf_data))
     assert "success" == await client.recv()

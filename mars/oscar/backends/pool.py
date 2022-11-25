@@ -718,10 +718,10 @@ class ActorPoolBase(AbstractActorPool, metaclass=ABCMeta):
             return pool.on_new_channel(channel)
 
         # create servers
-        server_addresses = external_addresses + [
-            internal_address,
-            gen_local_address(process_index),
-        ]
+        server_addresses = list(external_addresses)
+        if internal_address:
+            server_addresses.append(internal_address)
+        server_addresses.append(gen_local_address(process_index))
         server_addresses = sorted(set(server_addresses))
         servers = await cls._create_servers(server_addresses, handle_channel)
         cls._update_stored_addresses(servers, server_addresses, actor_pool_config, kw)
@@ -1341,7 +1341,11 @@ class MainActorPoolBase(ActorPoolBase):
     @classmethod
     @abstractmethod
     def get_external_addresses(
-        cls, address: str, n_process: int = None, ports: List[int] = None
+        cls,
+        address: str,
+        n_process: int = None,
+        ports: List[int] = None,
+        schemes: List[str] = None,
     ):
         """Returns external addresses for n pool processes"""
 
@@ -1361,6 +1365,8 @@ async def create_actor_pool(
     labels: List[str] = None,
     ports: List[int] = None,
     envs: List[Dict] = None,
+    external_address_schemes: List[str] = None,
+    enable_internal_addresses: List[bool] = None,
     subprocess_start_method: str = None,
     auto_recover: Union[str, bool] = "actor",
     modules: List[str] = None,
@@ -1369,6 +1375,7 @@ async def create_actor_pool(
     logging_conf: Union[Dict, None] = None,
     on_process_down: Callable[[MainActorPoolType, str], None] = None,
     on_process_recover: Callable[[MainActorPoolType, str], None] = None,
+    extra_conf: dict = None,
     **kwargs,
 ) -> MainActorPoolType:
     from ... import tensor, dataframe, learn, remote
@@ -1381,6 +1388,18 @@ async def create_actor_pool(
         )
     if envs and len(envs) != n_process:
         raise ValueError(f"`envs` should be of size {n_process}, got {len(envs)}")
+    if external_address_schemes and len(external_address_schemes) != n_process + 1:
+        raise ValueError(
+            f"`external_address_schemes` should be of size {n_process + 1}, "
+            f"got {len(external_address_schemes)}"
+        )
+    if enable_internal_addresses and len(enable_internal_addresses) != n_process + 1:
+        raise ValueError(
+            f"`enable_internal_addresses` should be of size {n_process + 1}, "
+            f"got {len(enable_internal_addresses)}"
+        )
+    elif not enable_internal_addresses:
+        enable_internal_addresses = [True] * (n_process + 1)
     if auto_recover is True:
         auto_recover = "actor"
     if auto_recover not in ("actor", "process", False):
@@ -1404,17 +1423,22 @@ async def create_actor_pool(
     ]
 
     external_addresses = pool_cls.get_external_addresses(
-        address, n_process=n_process, ports=ports
+        address, n_process=n_process, ports=ports, schemes=external_address_schemes
     )
     actor_pool_config = ActorPoolConfig()
     actor_pool_config.add_metric_configs(kwargs.get("metrics", {}))
     # add main config
     process_index_gen = pool_cls.process_index_gen(address)
     main_process_index = next(process_index_gen)
+    main_internal_address = (
+        pool_cls.gen_internal_address(main_process_index, external_addresses[0])
+        if enable_internal_addresses[0]
+        else None
+    )
     actor_pool_config.add_pool_conf(
         main_process_index,
         labels[0] if labels else None,
-        pool_cls.gen_internal_address(main_process_index, external_addresses[0]),
+        main_internal_address,
         external_addresses[0],
         modules=modules,
         suspend_sigint=suspend_sigint,
@@ -1425,10 +1449,15 @@ async def create_actor_pool(
     # add sub configs
     for i in range(n_process):
         sub_process_index = next(process_index_gen)
+        internal_address = (
+            pool_cls.gen_internal_address(sub_process_index, external_addresses[i + 1])
+            if enable_internal_addresses[i + 1]
+            else None
+        )
         actor_pool_config.add_pool_conf(
             sub_process_index,
             labels[i + 1] if labels else None,
-            pool_cls.gen_internal_address(sub_process_index, external_addresses[i + 1]),
+            internal_address,
             external_addresses[i + 1],
             env=envs[i] if envs else None,
             modules=modules,
@@ -1437,6 +1466,7 @@ async def create_actor_pool(
             logging_conf=logging_conf,
             kwargs=kwargs,
         )
+    actor_pool_config.add_extra_config(extra_conf)
 
     pool: MainActorPoolType = await pool_cls.create(
         {

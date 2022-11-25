@@ -75,6 +75,13 @@ async def new_cluster_in_isolation(
     web: bool = True,
     timeout: float = None,
     n_supervisor_process: int = 0,
+    numa_external_addr_scheme: str = None,
+    numa_enable_internal_addr: bool = None,
+    gpu_external_addr_scheme: str = None,
+    gpu_enable_internal_addr: bool = None,
+    external_addr_scheme: str = None,
+    enable_internal_addr: bool = None,
+    oscar_extra_conf: dict = None,
 ) -> ClientType:
     cluster = LocalCluster(
         address,
@@ -87,6 +94,13 @@ async def new_cluster_in_isolation(
         config,
         web,
         n_supervisor_process,
+        numa_external_addr_scheme=numa_external_addr_scheme,
+        numa_enable_internal_addr=numa_enable_internal_addr,
+        gpu_external_addr_scheme=gpu_external_addr_scheme,
+        gpu_enable_internal_addr=gpu_enable_internal_addr,
+        external_addr_scheme=external_addr_scheme,
+        enable_internal_addr=enable_internal_addr,
+        oscar_extra_conf=oscar_extra_conf,
     )
     await cluster.start()
     return await LocalClient.create(cluster, timeout)
@@ -105,6 +119,13 @@ async def new_cluster(
     loop: asyncio.AbstractEventLoop = None,
     use_uvloop: Union[bool, str] = "auto",
     n_supervisor_process: int = 0,
+    numa_external_addr_scheme: str = None,
+    numa_enable_internal_addr: bool = None,
+    gpu_external_addr_scheme: str = None,
+    gpu_enable_internal_addr: bool = None,
+    external_addr_scheme: str = None,
+    enable_internal_addr: bool = None,
+    oscar_extra_conf: dict = None,
 ) -> ClientType:
     coro = new_cluster_in_isolation(
         address,
@@ -117,6 +138,12 @@ async def new_cluster(
         config=config,
         web=web,
         n_supervisor_process=n_supervisor_process,
+        numa_external_addr_scheme=numa_external_addr_scheme,
+        numa_enable_internal_addr=numa_enable_internal_addr,
+        gpu_external_addr_scheme=gpu_external_addr_scheme,
+        gpu_enable_internal_addr=gpu_enable_internal_addr,
+        enable_internal_addr=enable_internal_addr,
+        oscar_extra_conf=oscar_extra_conf,
     )
     isolation = ensure_isolation_created(dict(loop=loop, use_uvloop=use_uvloop))
     fut = asyncio.run_coroutine_threadsafe(coro, isolation.loop)
@@ -145,6 +172,13 @@ class LocalCluster:
         config: Union[str, Dict] = None,
         web: Union[bool, str] = "auto",
         n_supervisor_process: int = 0,
+        numa_external_addr_scheme: str = None,
+        numa_enable_internal_addr: bool = None,
+        gpu_external_addr_scheme: str = None,
+        gpu_enable_internal_addr: bool = None,
+        external_addr_scheme: str = None,
+        enable_internal_addr: str = None,
+        oscar_extra_conf: dict = None,
     ):
         # load third party extensions.
         init_extension_entrypoints()
@@ -181,6 +215,16 @@ class LocalCluster:
             )
         )
 
+        # process oscar config
+        self._process_oscar_config(
+            numa_external_addr_scheme=numa_external_addr_scheme,
+            numa_enable_internal_addr=numa_enable_internal_addr,
+            gpu_external_addr_scheme=gpu_external_addr_scheme,
+            gpu_enable_internal_addr=gpu_enable_internal_addr,
+            external_addr_scheme=external_addr_scheme,
+            enable_internal_addr=enable_internal_addr,
+        )
+
         self._bands_to_resource = execution_config.get_deploy_band_resources()
         self._supervisor_pool = None
         self._worker_pools = []
@@ -188,6 +232,50 @@ class LocalCluster:
 
         self.supervisor_address = None
         self.web_address = None
+
+    def _process_oscar_config(
+        self,
+        numa_external_addr_scheme: str = None,
+        numa_enable_internal_addr: bool = None,
+        gpu_external_addr_scheme: str = None,
+        gpu_enable_internal_addr: bool = None,
+        external_addr_scheme: str = None,
+        enable_internal_addr: str = None,
+        oscar_extra_conf: dict = None,
+    ):
+        # process oscar config
+        if "oscar" not in self._config:
+            oscar_config = self._config["oscar"]
+        else:
+            self._config["oscar"] = oscar_config = dict()
+        if "numa" not in oscar_config:
+            oscar_config["numa"] = dict()
+        numa_config = oscar_config["numa"]
+        numa_config["external_addr_scheme"] = (
+            numa_external_addr_scheme
+            if numa_external_addr_scheme is not None
+            else external_addr_scheme
+        )
+        numa_config["enable_internal_addr"] = (
+            numa_enable_internal_addr
+            if numa_enable_internal_addr is not None
+            else enable_internal_addr
+        )
+        if "gpu" not in oscar_config:
+            oscar_config["gpu"] = dict()
+        gpu_config = oscar_config["gpu"]
+        gpu_config["external_addr_scheme"] = (
+            gpu_external_addr_scheme
+            if gpu_external_addr_scheme is not None
+            else external_addr_scheme
+        )
+        gpu_config["enable_internal_addr"] = (
+            gpu_enable_internal_addr
+            if gpu_enable_internal_addr is not None
+            else enable_internal_addr
+        )
+        if oscar_extra_conf is not None:
+            oscar_config["extra_conf"] = oscar_extra_conf
 
     @staticmethod
     def _get_cuda_devices(cuda_devices, n_worker):
@@ -250,6 +338,7 @@ class LocalCluster:
             metrics=self._config.get("metrics", {}),
             # passing logging conf to config logging when create pools
             logging_conf={},
+            oscar_config=self._config.get("oscar"),
         )
         self.supervisor_address = self._supervisor_pool.external_address
 
@@ -266,6 +355,7 @@ class LocalCluster:
                 metrics=self._config.get("metrics", {}),
                 # passing logging conf to config logging when create pools
                 logging_conf={},
+                oscar_config=self._config.get("oscar"),
             )
             self._worker_pools.append(worker_pool)
 
