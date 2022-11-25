@@ -16,6 +16,7 @@ import copy
 import itertools
 
 import numpy as np
+import pandas as pd
 
 from ... import opcodes
 from ...core import ENTITY_TYPE, get_output_types, recursive_tile
@@ -436,14 +437,20 @@ class DataFrameSample(DataFrameOperand, DataFrameOperandMixin):
         if chunk_samples is not None:
             size = chunk_samples[op.inputs[0].index[op.axis]]
 
-        ctx[op.outputs[0].key] = in_data.sample(
-            n=size,
-            frac=op.frac,
-            replace=op.replace,
-            weights=weights,
-            random_state=op.random_state,
-            axis=op.axis,
-        )
+        def _sample(data: pd.DataFrame) -> pd.DataFrame:
+            return data.sample(
+                n=size,
+                frac=op.frac,
+                replace=op.replace,
+                weights=weights,
+                random_state=op.random_state,
+                axis=op.axis,
+            )
+
+        try:
+            ctx[op.outputs[0].key] = _sample(in_data)
+        except ValueError:
+            ctx[op.outputs[0].key] = _sample(in_data.copy())
 
 
 def sample(

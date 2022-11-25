@@ -22,4 +22,8 @@ from .socket import (
     UnixSocketServer,
     SocketChannel,
 )
-from .ucx import UCXClient, UCXServer, UCXChannel
+from .ucx import (
+    UCXClient,
+    UCXServer,
+    UCXChannel,
+)  # noqa: F401 # pylint: disable=unused-import

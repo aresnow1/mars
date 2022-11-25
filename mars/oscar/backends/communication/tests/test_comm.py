@@ -38,27 +38,33 @@ from .. import (
     Server,
     UCXServer,
 )
+from ..ucx import UCXInitializer
 
 test_data = np.random.RandomState(0).rand(10, 10)
 port = get_next_port()
 cupy = lazy_import("cupy")
 cudf = lazy_import("cudf")
 ucp = lazy_import("ucp")
-ucp_port = get_next_port()
 
 
-# server_type, config, con
-params: List[Tuple[Type[Server], Dict, str]] = [
-    (SocketServer, dict(host="127.0.0.1", port=port), f"127.0.0.1:{port}"),
-]
-if sys.platform != "win32":
-    params.append((UnixSocketServer, dict(process_index="0"), f"unixsocket:///0"))
-if ucp is not None:
-    # test ucx
-    params.append(
-        (UCXServer, dict(host="127.0.0.1", port=ucp_port), f"127.0.0.1:{ucp_port}")
-    )
-local_params = params.copy()
+def gen_params():
+    # server_type, config, con
+    params: List[Tuple[Type[Server], Dict, str]] = [
+        (SocketServer, dict(host="127.0.0.1", port=port), f"127.0.0.1:{port}"),
+    ]
+    if sys.platform != "win32":
+        params.append((UnixSocketServer, dict(process_index="0"), f"unixsocket:///0"))
+    if ucp is not None:
+        ucp_port = get_next_port()
+        # test ucx
+        params.append(
+            (UCXServer, dict(host="127.0.0.1", port=ucp_port), f"127.0.0.1:{ucp_port}")
+        )
+    return params
+
+
+params = gen_params()
+local_params = gen_params().copy()
 local_params.append((DummyServer, dict(), "dummy://0"))
 
 
@@ -98,6 +104,11 @@ async def test_comm(server_type, config, con):
 
     assert server.stopped
 
+    if server_type is UCXServer:
+        UCXInitializer.reset()
+        # skip create server on same port for ucx
+        return
+
     async with await server_type.create(config) as server2:
         assert not server2.stopped
     assert server2.stopped
@@ -122,9 +133,12 @@ def _wrap_test(server_started_event, conf, tp):
     asyncio.run(_test())
 
 
-@pytest.mark.parametrize("server_type, config, con", params)
 @pytest.mark.asyncio
+@pytest.mark.parametrize("server_type, config, con", params)
 async def test_multiprocess_comm(server_type, config, con):
+    if server_type is UCXServer:
+        UCXInitializer.reset()
+
     server_started = multiprocessing.Event()
 
     p = multiprocessing.Process(

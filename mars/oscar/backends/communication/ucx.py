@@ -52,7 +52,7 @@ def synchronize_stream(stream: int = 0):
     stream.synchronize()
 
 
-class _UCXInitializer:
+class UCXInitializer:
     _inited = False
 
     @staticmethod
@@ -114,10 +114,10 @@ class _UCXInitializer:
 
     @staticmethod
     def init(ucx_config: dict):
-        if _UCXInitializer._inited:
+        if UCXInitializer._inited:
             return
 
-        options, envs = _UCXInitializer._get_options(ucx_config)
+        options, envs = UCXInitializer._get_options(ucx_config)
 
         # We ensure the CUDA context is created before initializing UCX. This can't
         # be safely handled externally because communications start before
@@ -176,7 +176,12 @@ class _UCXInitializer:
         finally:
             os.environ = original_environ
 
-        _UCXInitializer._inited = True
+        UCXInitializer._inited = True
+
+    @staticmethod
+    def reset():
+        ucp.reset()
+        UCXInitializer._inited = False
 
 
 class UCXChannel(Channel):
@@ -371,7 +376,7 @@ class UCXServer(Server):
         handle_channel = config.pop("handle_channel")
 
         # init
-        _UCXInitializer.init(config.get("ucx", dict()))
+        UCXInitializer.init(config.get("ucx", dict()))
 
         async def serve_forever(client_ucp_endpoint: "ucp.Endpoint"):
             try:
@@ -427,12 +432,13 @@ class UCXServer(Server):
         await asyncio.gather(
             *(channel.close() for channel in self._channels if not channel.closed)
         )
+        self._ucp_listener = None
         self._closed.set()
 
     @property
     @implements(Server.stopped)
     def stopped(self) -> bool:
-        return self._ucp_listener.closed()
+        return self._ucp_listener is None
 
 
 @register_client
@@ -453,7 +459,7 @@ class UCXClient(Client):
         port = int(port)
         kwargs = kwargs.copy()
         ucx_config = kwargs.pop("config", dict()).get("ucx", dict())
-        _UCXInitializer.init(ucx_config)
+        UCXInitializer.init(ucx_config)
 
         try:
             ucp_endpoint = await ucp.create_endpoint(host, port)

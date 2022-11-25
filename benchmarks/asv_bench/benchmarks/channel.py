@@ -144,10 +144,18 @@ class MultiprocessChannelSuite:
     def time_unixsocket_cpu(self):
         transfer_data(UnixSocketServer)
 
-    if ucp is not None:
 
-        def time_ucx_cpu(self):
-            transfer_data(UCXServer)
+class MultiprocessUCXChannelsuite:
+    """
+    Benchmark that times performance of channel of UCX.
+    """
+
+    def setup(self):
+        if ucp is None:
+            raise NotImplementedError
+
+    def time_ucx_cpu(self):
+        transfer_data(UCXServer)
 
 
 class MultiprocessGPUChannelSuite:
@@ -162,10 +170,8 @@ class MultiprocessGPUChannelSuite:
     def time_unixsocket_gpu(self):
         transfer_data(UnixSocketServer, gpu=True)
 
-    if cupy is not None:
-
-        def time_ucx_gpu(self):
-            transfer_data(UCXServer, gpu=True)
+    def time_ucx_gpu(self):
+        transfer_data(UCXServer, gpu=True)
 
 
 if __name__ == "__main__":
@@ -173,13 +179,14 @@ if __name__ == "__main__":
     s.time_socket_cpu()
     s.time_unixsocket_cpu()
     if ucp is not None:
-        s.time_ucx_cpu()
-    s2 = MultiprocessGPUChannelSuite()
+        s2 = MultiprocessUCXChannelsuite()
+        s2.time_ucx_cpu()
+    s3 = MultiprocessGPUChannelSuite()
     try:
-        s2.setup()
-        s2.time_socket_gpu()
-        s2.time_unixsocket_gpu()
+        s3.setup()
+        s3.time_socket_gpu()
+        s3.time_unixsocket_gpu()
         if cupy is not None:
-            s2.time_ucx_gpu()
+            s3.time_ucx_gpu()
     except NotImplementedError:
         pass
