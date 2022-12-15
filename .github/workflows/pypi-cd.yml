@@ -55,6 +55,7 @@ jobs:
           CIBW_BEFORE_BUILD: git reset --hard && pip install -r ci/requirements-wheel.txt
           CIBW_BUILD: cp310-manylinux_x86_64
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BUILD_VERBOSITY: 1
 
       - name: Build source
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.arch == 'auto' }}
