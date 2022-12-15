@@ -65,26 +65,26 @@ jobs:
           pip install -r ci/requirements-wheel.txt
           python setup.py sdist --formats=gztar --dist-dir=./wheelhouse
 
-      - name: Release to pypi
-        shell: bash
-        env:
-          PYPI_USR: ${{ secrets.PYPI_USERNAME }}
-          PYPI_PWD: ${{ secrets.PYPI_PASSWORD }}
-        run: |
-          if [[ "$GITHUB_REPOSITORY" == "mars-project/mars" ]]; then
-            PYPI_REPO="https://upload.pypi.org/legacy/"
-          else
-            PYPI_REPO="https://test.pypi.org/legacy/"
-          fi
-          echo "[distutils]"             > ~/.pypirc
-          echo "index-servers ="        >> ~/.pypirc
-          echo "    pypi"               >> ~/.pypirc
-          echo "[pypi]"                 >> ~/.pypirc
-          echo "repository=$PYPI_REPO"  >> ~/.pypirc
-          echo "username=$PYPI_USR"     >> ~/.pypirc
-          echo "password=$PYPI_PWD"     >> ~/.pypirc
-          python -m pip install twine
-          python -m twine upload -r pypi --skip-existing wheelhouse/*
+#      - name: Release to pypi
+#        shell: bash
+#        env:
+#          PYPI_USR: ${{ secrets.PYPI_USERNAME }}
+#          PYPI_PWD: ${{ secrets.PYPI_PASSWORD }}
+#        run: |
+#          if [[ "$GITHUB_REPOSITORY" == "mars-project/mars" ]]; then
+#            PYPI_REPO="https://upload.pypi.org/legacy/"
+#          else
+#            PYPI_REPO="https://test.pypi.org/legacy/"
+#          fi
+#          echo "[distutils]"             > ~/.pypirc
+#          echo "index-servers ="        >> ~/.pypirc
+#          echo "    pypi"               >> ~/.pypirc
+#          echo "[pypi]"                 >> ~/.pypirc
+#          echo "repository=$PYPI_REPO"  >> ~/.pypirc
+#          echo "username=$PYPI_USR"     >> ~/.pypirc
+#          echo "password=$PYPI_PWD"     >> ~/.pypirc
+#          python -m pip install twine
+#          python -m twine upload -r pypi --skip-existing wheelhouse/*
 
       - name: Upload artifacts to github
         uses: actions/upload-artifact@v1
