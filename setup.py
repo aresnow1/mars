@@ -187,6 +187,9 @@ class BuildWeb(Command):
                 break
         if not cmd_errored:
             assert os.path.exists(cls._web_dest_path)
+        print(f"web dir: {web_src_path}")
+        print(f"web dir: {os.listdir(web_src_path)}")
+        print(f'web dir: {os.listdir(os.path.join(web_src_path, "static"))}')
 
 
 CustomInstall.register_pre_command("build_web")
